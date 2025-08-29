@@ -5,21 +5,25 @@
 
 // 将Markdown文本转换为JSON数据
 export function parseMarkdownToJson(markdownText) {
-  const lines = markdownText.split('\n').map(line => line.trim()).filter(line => line)
+  const lines = markdownText.split('\n')
   const result = []
   let currentTopic = null
   let currentTask = null
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
+    const trimmedLine = line.trim()
+    
+    // 跳过空行
+    if (!trimmedLine) continue
     
     // 解析专题（一级标题）
-    if (line.startsWith('# ') && !line.startsWith('##')) {
+    if (trimmedLine.startsWith('# ') && !trimmedLine.startsWith('##')) {
       if (currentTopic) {
         result.push(currentTopic)
       }
       
-      const topicName = line.substring(2).trim()
+      const topicName = trimmedLine.substring(2).trim()
       currentTopic = {
         id: generateId(),
         name: topicName,
@@ -34,7 +38,7 @@ export function parseMarkdownToJson(markdownText) {
     }
     
     // 解析任务（二级标题）
-    else if (line.startsWith('## ')) {
+    else if (trimmedLine.startsWith('## ')) {
       if (!currentTopic) {
         currentTopic = {
           id: generateId(),
@@ -50,7 +54,7 @@ export function parseMarkdownToJson(markdownText) {
         currentTopic.tasks.push(currentTask)
       }
       
-      const taskName = line.substring(3).trim()
+      const taskName = trimmedLine.substring(3).trim()
       currentTask = {
         id: generateId(),
         name: taskName,
@@ -63,8 +67,8 @@ export function parseMarkdownToJson(markdownText) {
       i = collectDescription(lines, i + 1, currentTask)
     }
     
-    // 解析待办事项
-    else if (line.startsWith('- ') && !line.startsWith('  - ')) {
+    // 解析待办事项（一级无序列表）
+    else if (trimmedLine.startsWith('- ') && getIndentLevel(line) === 0) {
       if (!currentTask) {
         if (!currentTopic) {
           currentTopic = {
@@ -87,7 +91,7 @@ export function parseMarkdownToJson(markdownText) {
         currentTopic.tasks.push(currentTask)
       }
       
-      const todoTitle = line.substring(2).trim()
+      const todoTitle = trimmedLine.substring(2).trim()
       const todo = {
         id: generateId(),
         title: todoTitle,
@@ -98,7 +102,7 @@ export function parseMarkdownToJson(markdownText) {
         createdAt: new Date().toISOString()
       }
       
-      // 解析待办的进度和备注
+      // 解析待办的进度和备注（二级无序列表）
       i = parseTodoDetails(lines, i + 1, todo)
       
       currentTask.todos.push(todo)
@@ -116,23 +120,36 @@ export function parseMarkdownToJson(markdownText) {
   return result
 }
 
+// 获取行的缩进级别（以2个空格为一个缩进单位）
+function getIndentLevel(line) {
+  const leadingSpaces = line.length - line.trimStart().length
+  return Math.floor(leadingSpaces / 2)
+}
+
 // 收集描述信息
 function collectDescription(lines, startIndex, target) {
   let i = startIndex
   
   while (i < lines.length) {
     const line = lines[i]
+    const trimmedLine = line.trim()
     
-    if (line.startsWith('#') || line.startsWith('-') || line.startsWith('###')) {
+    // 跳过空行
+    if (!trimmedLine) {
+      i++
+      continue
+    }
+    
+    // 遇到新的标题或一级无序列表时停止
+    if (trimmedLine.startsWith('#') || (trimmedLine.startsWith('- ') && getIndentLevel(line) === 0)) {
       break
     }
     
-    if (line) {
-      if (target.description) {
-        target.description += '\n' + line
-      } else {
-        target.description = line
-      }
+    // 添加到描述中
+    if (target.description) {
+      target.description += '\n' + trimmedLine
+    } else {
+      target.description = trimmedLine
     }
     
     i++
@@ -141,27 +158,38 @@ function collectDescription(lines, startIndex, target) {
   return i - 1
 }
 
-// 解析待办详情
+// 解析待办详情（只处理二级无序列表）
 function parseTodoDetails(lines, startIndex, todo) {
   let i = startIndex
   
   while (i < lines.length) {
     const line = lines[i]
+    const trimmedLine = line.trim()
     
-    if (line.startsWith('- ') || line.startsWith('#') || line.startsWith('###')) {
+    // 跳过空行
+    if (!trimmedLine) {
+      i++
+      continue
+    }
+    
+    // 遇到新的标题或一级无序列表时停止
+    if (trimmedLine.startsWith('#') || (trimmedLine.startsWith('- ') && getIndentLevel(line) === 0)) {
       break
     }
     
-    if (line.startsWith('  - 进度：')) {
-      const progressMatch = line.match(/进度：(\d+)%/)
-      if (progressMatch) {
-        todo.progress = parseInt(progressMatch[1])
-        if (todo.progress === 100) {
-          todo.completed = true
+    // 只处理二级无序列表（缩进级别为1）
+    if (trimmedLine.startsWith('- ') && getIndentLevel(line) === 1) {
+      if (trimmedLine.startsWith('- 进度：')) {
+        const progressMatch = trimmedLine.match(/进度：(\d+)%/)
+        if (progressMatch) {
+          todo.progress = parseInt(progressMatch[1])
+          if (todo.progress === 100) {
+            todo.completed = true
+          }
         }
+      } else if (trimmedLine.startsWith('- 备注：')) {
+        todo.note = trimmedLine.substring(4).trim()
       }
-    } else if (line.startsWith('  - 备注：')) {
-      todo.note = line.substring(6).trim()
     }
     
     i++
@@ -175,29 +203,35 @@ export function convertJsonToMarkdown(topics) {
   let markdown = ''
   
   topics.forEach(topic => {
+    // 专题标题
     markdown += `# ${topic.name}\n`
     
+    // 专题描述
     if (topic.description) {
       markdown += `${topic.description}\n`
     }
     markdown += '\n'
     
     topic.tasks.forEach(task => {
+      // 任务标题
       markdown += `## ${task.name}\n`
       
+      // 任务描述
       if (task.description) {
         markdown += `${task.description}\n`
       }
       markdown += '\n'
       
+      // 待办事项
       task.todos.forEach(todo => {
+        // 待办标题（一级列表，无缩进）
         markdown += `- ${todo.title}\n`
         
-        if (todo.progress > 0) {
-          markdown += `  - 进度：${todo.progress}%\n`
-        }
+        // 进度（二级列表，2个空格缩进，始终显示进度）
+        markdown += `  - 进度：${todo.progress}%\n`
         
-        if (todo.note) {
+        // 备注（二级列表，2个空格缩进，只有有备注时才导出）
+        if (todo.note && todo.note.trim()) {
           markdown += `  - 备注：${todo.note}\n`
         }
       })

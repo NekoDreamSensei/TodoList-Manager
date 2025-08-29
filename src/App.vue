@@ -40,6 +40,15 @@ const loadUserTopics = () => {
   const allTopics = JSON.parse(localStorage.getItem('topics') || '{}')
   const userTopics = allTopics[currentUser.value.username] || []
   topics.value = userTopics
+  
+  // 调试信息
+  console.log(`加载用户 ${currentUser.value.username} 的数据:`, {
+    topicsCount: userTopics.length,
+    totalTasks: userTopics.reduce((sum, t) => sum + (t.tasks ? t.tasks.length : 0), 0),
+    totalTodos: userTopics.reduce((sum, t) => sum + (t.tasks ? t.tasks.reduce((s, task) => s + (task.todos ? task.todos.length : 0), 0) : 0), 0),
+    localStorageKeys: Object.keys(allTopics),
+    allTopicsData: allTopics
+  })
 }
 
 // 保存数据
@@ -49,6 +58,14 @@ const saveData = () => {
   const allTopics = JSON.parse(localStorage.getItem('topics') || '{}')
   allTopics[currentUser.value.username] = topics.value
   localStorage.setItem('topics', JSON.stringify(allTopics))
+  
+  // 调试信息
+  console.log(`保存用户 ${currentUser.value.username} 的数据:`, {
+    topicsCount: topics.value.length,
+    totalTasks: topics.value.reduce((sum, t) => sum + (t.tasks ? t.tasks.length : 0), 0),
+    totalTodos: topics.value.reduce((sum, t) => sum + (t.tasks ? t.tasks.reduce((s, task) => s + (task.todos ? task.todos.length : 0), 0) : 0), 0),
+    localStorageSize: JSON.stringify(allTopics).length
+  })
 }
 
 // 用户认证
@@ -271,7 +288,11 @@ const deleteTodo = (todoId) => {
 }
 
 // 监听数据变化，自动保存
-watch(topics, saveData, { deep: true })
+watch(topics, () => {
+  if (currentUser.value) {
+    saveData()
+  }
+}, { deep: true })
 
 // 数据导出为JSON
 const exportUserData = () => {
@@ -305,8 +326,12 @@ const importUserData = (event) => {
         // 导入JSON格式
         const importedData = JSON.parse(e.target.result)
         if (importedData.username === currentUser.value.username) {
-          topics.value = importedData.topics
-          alert('JSON数据导入成功！')
+          // 合并数据而不是覆盖
+          const mergedTopics = mergeTopics(topics.value, importedData.topics)
+          topics.value = mergedTopics
+          // 保存到本地存储
+          saveData()
+          alert(`JSON数据导入成功！\n合并后共有 ${mergedTopics.length} 个专题`)
         } else {
           alert('导入数据与当前用户不匹配，请确保导入正确的数据文件。')
         }
@@ -323,9 +348,15 @@ const importUserData = (event) => {
         
         // 解析Markdown为JSON
         const parsedTopics = parseMarkdownToJson(markdownText)
-        topics.value = parsedTopics
         
-        alert(`Markdown数据导入成功！\n解析出 ${parsedTopics.length} 个专题，共 ${parsedTopics.reduce((sum, t) => sum + t.tasks.length, 0)} 个任务`)
+        // 合并数据而不是覆盖
+        const mergedTopics = mergeTopics(topics.value, parsedTopics)
+        topics.value = mergedTopics
+        
+        // 保存到本地存储
+        saveData()
+        
+        alert(`Markdown数据导入成功！\n解析出 ${parsedTopics.length} 个专题，合并后共有 ${mergedTopics.length} 个专题`)
       } else {
         alert('不支持的文件格式，请使用 .json、.md 或 .txt 文件')
       }
@@ -339,6 +370,109 @@ const importUserData = (event) => {
     }
   }
   reader.readAsText(file)
+}
+
+// 合并专题数据
+const mergeTopics = (existingTopics, newTopics) => {
+  if (!newTopics || newTopics.length === 0) {
+    return existingTopics
+  }
+  
+  if (!existingTopics || existingTopics.length === 0) {
+    return newTopics
+  }
+  
+  const merged = [...existingTopics]
+  const existingNames = new Set(existingTopics.map(t => t.name))
+  
+  newTopics.forEach(newTopic => {
+    if (existingNames.has(newTopic.name)) {
+      // 如果专题名称已存在，合并任务
+      const existingTopic = existingTopics.find(t => t.name === newTopic.name)
+      if (existingTopic) {
+        const mergedTasks = mergeTasks(existingTopic.tasks, newTopic.tasks)
+        existingTopic.tasks = mergedTasks
+        existingTopic.description = newTopic.description || existingTopic.description
+      }
+    } else {
+      // 如果专题名称不存在，直接添加
+      merged.push({
+        ...newTopic,
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9) // 生成新的唯一ID
+      })
+    }
+  })
+  
+  return merged
+}
+
+// 合并任务数据
+const mergeTasks = (existingTasks, newTasks) => {
+  if (!newTasks || newTasks.length === 0) {
+    return existingTasks
+  }
+  
+  if (!existingTasks || existingTasks.length === 0) {
+    return newTasks
+  }
+  
+  const merged = [...existingTasks]
+  const existingNames = new Set(existingTasks.map(t => t.name))
+  
+  newTasks.forEach(newTask => {
+    if (existingNames.has(newTask.name)) {
+      // 如果任务名称已存在，合并待办事项
+      const existingTask = existingTasks.find(t => t.name === newTask.name)
+      if (existingTask) {
+        const mergedTodos = mergeTodos(existingTask.todos, newTask.todos)
+        existingTask.todos = mergedTodos
+        existingTask.description = newTask.description || existingTask.description
+      }
+    } else {
+      // 如果任务名称不存在，直接添加
+      merged.push({
+        ...newTask,
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9) // 生成新的唯一ID
+      })
+    }
+  })
+  
+  return merged
+}
+
+// 合并待办事项数据
+const mergeTodos = (existingTodos, newTodos) => {
+  if (!newTodos || newTodos.length === 0) {
+    return existingTodos
+  }
+  
+  if (!existingTodos || existingTodos.length === 0) {
+    return newTodos
+  }
+  
+  const merged = [...existingTodos]
+  const existingTitles = new Set(existingTodos.map(t => t.title))
+  
+  newTodos.forEach(newTodo => {
+    if (existingTitles.has(newTodo.title)) {
+      // 如果待办标题已存在，更新进度和备注（保留较高的进度）
+      const existingTodo = existingTodos.find(t => t.title === newTodo.title)
+      if (existingTodo) {
+        existingTodo.progress = Math.max(existingTodo.progress || 0, newTodo.progress || 0)
+        existingTodo.note = newTodo.note || existingTodo.note
+        existingTodo.description = newTodo.description || existingTodo.description
+        existingTodo.completed = existingTodo.progress === 100 || newTodo.completed
+      }
+    } else {
+      // 如果待办标题不存在，直接添加
+      merged.push({
+        ...newTodo,
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9) // 生成新的唯一ID
+      })
+    }
+  })
+  
+  return merged
 }
 
 // 数据导出为Markdown
