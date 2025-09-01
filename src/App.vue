@@ -5,6 +5,9 @@ import CreateTopicModal from './components/CreateTopicModal.vue'
 import CreateTaskModal from './components/CreateTaskModal.vue'
 import CreateTodoModal from './components/CreateTodoModal.vue'
 import EditTodoModal from './components/EditTodoModal.vue'
+import EditTopicModal from './components/EditTopicModal.vue'
+import ProgressOverview from './components/ProgressOverview.vue'
+import EditTaskModal from './components/EditTaskModal.vue'
 import { parseMarkdownToJson, convertJsonToMarkdown, validateMarkdownFormat } from './utils/markdownParser.js'
 
 // 响应式数据
@@ -16,6 +19,59 @@ const showCreateTopic = ref(false)
 const showCreateTask = ref(false)
 const showCreateTodo = ref(false)
 const editingTodo = ref(null)
+const showEditTopic = ref(false)
+const showEditTask = ref(false)
+const selectedTaskForEdit = ref(null)
+
+// 重名检测和自动重命名工具函数
+const generateUniqueName = (baseName, existingNames, type = '') => {
+  if (!existingNames.includes(baseName)) {
+    return baseName
+  }
+  
+  let counter = 1
+  let newName = `${baseName}_${counter}`
+  
+  while (existingNames.includes(newName)) {
+    counter++
+    newName = `${baseName}_${counter}`
+  }
+  
+  return newName
+}
+
+// 检测专题重名
+const checkTopicNameConflict = (name, excludeId = null) => {
+  const existingNames = topics.value
+    .filter(topic => topic.id !== excludeId)
+    .map(topic => topic.name)
+  return generateUniqueName(name, existingNames, '专题')
+}
+
+// 检测任务重名
+const checkTaskNameConflict = (name, topicId, excludeId = null) => {
+  const topic = topics.value.find(t => t.id === topicId)
+  if (!topic) return name
+  
+  const existingNames = topic.tasks
+    .filter(task => task.id !== excludeId)
+    .map(task => task.name)
+  return generateUniqueName(name, existingNames, '任务')
+}
+
+// 检测待办重名
+const checkTodoNameConflict = (name, topicId, taskId, excludeId = null) => {
+  const topic = topics.value.find(t => t.id === topicId)
+  if (!topic) return name
+  
+  const task = topic.tasks.find(t => t.id === taskId)
+  if (!task) return name
+  
+  const existingNames = task.todos
+    .filter(todo => todo.id !== excludeId)
+    .map(todo => todo.title)
+  return generateUniqueName(name, existingNames, '待办')
+}
 
 // 初始化数据
 onMounted(() => {
@@ -94,9 +150,11 @@ const logout = () => {
 
 // 专题管理
 const createTopic = (topicData) => {
+  const uniqueName = checkTopicNameConflict(topicData.name)
+  
   const newTopic = {
     id: Date.now().toString(),
-    name: topicData.name,
+    name: uniqueName,
     description: topicData.description,
     createdAt: new Date().toISOString(),
     tasks: []
@@ -105,18 +163,28 @@ const createTopic = (topicData) => {
   topics.value.push(newTopic)
   saveData()
   showCreateTopic.value = false
+  
+  // 如果名称被修改，提示用户
+  if (uniqueName !== topicData.name) {
+    alert(`名称已存在，专题名称已自动重命名为：${uniqueName}`)
+  }
 }
 
+// 选择专题
 const selectTopic = (topic) => {
-  selectedTopic.value = topic
+  selectedTopic.value = { ...topic } // 创建副本而不是直接引用
   selectedTask.value = null
 }
 
 // 任务管理
 const createTask = (taskData) => {
+  if (!selectedTopic.value) return
+  
+  const uniqueName = checkTaskNameConflict(taskData.name, selectedTopic.value.id)
+  
   const newTask = {
     id: Date.now().toString(),
-    name: taskData.name,
+    name: uniqueName,
     description: taskData.description,
     createdAt: new Date().toISOString(),
     todos: []
@@ -125,6 +193,11 @@ const createTask = (taskData) => {
   selectedTopic.value.tasks.push(newTask)
   saveData()
   showCreateTask.value = false
+  
+  // 如果名称被修改，提示用户
+  if (uniqueName !== taskData.name) {
+    alert(`名称已存在，任务名称已自动重命名为：${uniqueName}`)
+  }
 }
 
 const selectTask = (task) => {
@@ -133,19 +206,28 @@ const selectTask = (task) => {
 
 // 待办管理
 const createTodo = (todoData) => {
+  if (!selectedTask.value || !selectedTopic.value) return
+  
+  const uniqueName = checkTodoNameConflict(todoData.title, selectedTopic.value.id, selectedTask.value.id)
+  
   const newTodo = {
     id: Date.now().toString(),
-    title: todoData.title,
-    description: todoData.description,
-    completed: false,
-    progress: 0,
-    note: '',
+    title: uniqueName,
+    description: '', // 保持空字符串，因为不再使用描述字段
+    completed: todoData.progress === 100, // 如果进度是100%，则自动标记为完成
+    progress: todoData.progress, // 使用用户设置的进度
+    note: todoData.note, // 使用用户设置的备注
     createdAt: new Date().toISOString()
   }
   
   selectedTask.value.todos.push(newTodo)
   saveData()
   showCreateTodo.value = false
+  
+  // 如果名称被修改，提示用户
+  if (uniqueName !== todoData.title) {
+    alert(`名称已存在，待办名称已自动重命名为：${uniqueName}`)
+  }
 }
 
 const toggleTodo = (todo) => {
@@ -170,12 +252,27 @@ const editTodo = (todo) => {
 }
 
 const updateTodo = (updatedTodo) => {
-  const index = selectedTask.value.todos.findIndex(t => t.id === updatedTodo.id)
-  if (index !== -1) {
-    selectedTask.value.todos[index] = { ...updatedTodo }
+  if (!selectedTask.value || !selectedTopic.value) return
+  
+  const todoIndex = selectedTask.value.todos.findIndex(todo => todo.id === updatedTodo.id)
+  if (todoIndex !== -1) {
+    const uniqueName = checkTodoNameConflict(updatedTodo.title, selectedTopic.value.id, selectedTask.value.id, updatedTodo.id)
+    
+    selectedTask.value.todos[todoIndex] = { 
+      ...updatedTodo, 
+      title: uniqueName 
+    }
+    
     saveData()
+    editingTodo.value = null
+    
+    // 如果名称被修改，提示用户
+    if (uniqueName !== updatedTodo.title) {
+      alert(`名称已存在，待办名称已自动重命名为：${uniqueName}`)
+    } else {
+      alert('待办信息已更新！')
+    }
   }
-  editingTodo.value = null
 }
 
 // 进度计算
@@ -230,19 +327,7 @@ const getProgressColor = (progress) => {
   return 'linear-gradient(90deg, #e53e3e, #c53030)' // 红色
 }
 
-const getTotalTasks = () => {
-  return topics.value.reduce((sum, topic) => sum + (topic.tasks ? topic.tasks.length : 0), 0)
-}
 
-const getOverallProgress = () => {
-  if (!topics.value || topics.value.length === 0) return 0
-  
-  const totalProgress = topics.value.reduce((sum, topic) => {
-    return sum + getTopicProgress(topic)
-  }, 0)
-  
-  return Math.round(totalProgress / topics.value.length)
-}
 
 const getCompletedTodos = () => {
   if (!selectedTask.value || !selectedTask.value.todos) return 0
@@ -501,6 +586,99 @@ const clearUserData = () => {
     alert('数据已清除！')
   }
 }
+
+// 更新专题信息
+const updateTopic = (updatedTopic) => {
+  const index = topics.value.findIndex(topic => topic.id === updatedTopic.id)
+  if (index !== -1) {
+    const uniqueName = checkTopicNameConflict(updatedTopic.name, updatedTopic.id)
+    
+    topics.value[index] = { 
+      ...updatedTopic, 
+      name: uniqueName 
+    }
+    
+    // 同步更新当前选中的专题
+    if (selectedTopic.value && selectedTopic.value.id === updatedTopic.id) {
+      selectedTopic.value = { ...topics.value[index] }
+    }
+    
+    saveData()
+    
+    // 如果名称被修改，提示用户
+    if (uniqueName !== updatedTopic.name) {
+      alert(`名称已存在，专题名称已自动重命名为：${uniqueName}`)
+    } else {
+      alert('专题信息已更新！')
+    }
+  }
+}
+
+// 删除专题
+const deleteTopicFromEdit = (topicId) => {
+  const index = topics.value.findIndex(topic => topic.id === topicId)
+  if (index !== -1) {
+    topics.value.splice(index, 1)
+    saveData()
+    selectedTopic.value = null
+    alert('专题已删除！')
+  }
+}
+
+// 切换任务详情显示/隐藏
+const toggleTaskDetail = (task) => {
+  if (selectedTask.value && selectedTask.value.id === task.id) {
+    // 如果当前任务已选中，则取消选中（折叠）
+    selectedTask.value = null
+  } else {
+    // 否则选中该任务（展开）
+    selectTask(task)
+  }
+}
+
+// 更新任务信息
+const updateTask = (updatedTask) => {
+  if (selectedTopic.value) {
+    const taskIndex = selectedTopic.value.tasks.findIndex(task => task.id === updatedTask.id)
+    if (taskIndex !== -1) {
+      const uniqueName = checkTaskNameConflict(updatedTask.name, selectedTopic.value.id, updatedTask.id)
+      
+      selectedTopic.value.tasks[taskIndex] = { 
+        ...updatedTask, 
+        name: uniqueName 
+      }
+      
+      // 同步更新当前选中的任务
+      if (selectedTask.value && selectedTask.value.id === updatedTask.id) {
+        selectedTask.value = { ...selectedTopic.value.tasks[taskIndex] }
+      }
+      
+      saveData()
+      showEditTask.value = false
+      
+      // 如果名称被修改，提示用户
+      if (uniqueName !== updatedTask.name) {
+        alert(`名称已存在，任务名称已自动重命名为：${uniqueName}`)
+      } else {
+        alert('任务信息已更新！')
+      }
+    }
+  }
+}
+
+// 删除任务
+const deleteTaskFromEdit = (taskId) => {
+  if (selectedTopic.value) {
+    const taskIndex = selectedTopic.value.tasks.findIndex(task => task.id === taskId)
+    if (taskIndex !== -1) {
+      selectedTopic.value.tasks.splice(taskIndex, 1)
+      selectedTask.value = null
+      saveData()
+      alert('任务已删除！')
+    }
+  }
+}
+
 </script>
 
 <template>
@@ -566,13 +744,6 @@ const clearUserData = () => {
                   </div>
                 </div>
               </div>
-              <button 
-                @click.stop="deleteTopic(topic.id)" 
-                class="btn-delete"
-                title="删除专题"
-              >
-                ×
-              </button>
             </div>
           </div>
         </aside>
@@ -580,43 +751,8 @@ const clearUserData = () => {
         <!-- 主内容区域 -->
         <div class="content-area">
           <!-- 专题概览 -->
-          <div v-if="!selectedTopic" class="overview">
-            <h2>欢迎使用 TodoList</h2>
-            
-            <!-- 用户信息卡片 -->
-            <div class="user-info-card">
-              <div class="user-avatar">
-                {{ currentUser.username.charAt(0).toUpperCase() }}
-              </div>
-              <div class="user-details">
-                <h3>{{ currentUser.username }}</h3>
-                <p>账户创建时间: {{ new Date(currentUser.createdAt || Date.now()).toLocaleDateString('zh-CN') }}</p>
-                <p>总专题数: {{ topics.length }}</p>
-              </div>
-            </div>
-            
-            <div class="stats-grid">
-              <div class="stat-card">
-                <h3>总专题数</h3>
-                <div class="stat-number">{{ topics.length }}</div>
-              </div>
-              <div class="stat-card">
-                <h3>总任务数</h3>
-                <div class="stat-number">{{ getTotalTasks() }}</div>
-              </div>
-              <div class="stat-card">
-                <h3>完成率</h3>
-                <div class="stat-number">{{ getOverallProgress() }}%</div>
-              </div>
-            </div>
-            
-            <!-- 专题完成情况饼图 -->
-            <div class="chart-container">
-              <h3>专题完成情况</h3>
-              <div class="pie-chart">
-                <canvas ref="pieChart" width="300" height="300"></canvas>
-              </div>
-            </div>
+          <div v-if="!selectedTopic" class="main-overview">
+            <ProgressOverview :topics="topics" />
           </div>
 
           <!-- 专题详情 -->
@@ -624,7 +760,16 @@ const clearUserData = () => {
             <div class="topic-header">
               <button @click="selectedTopic = null" class="btn-back">← 返回概览</button>
               <h2>{{ selectedTopic.name }}</h2>
-              <button @click="showCreateTask = true" class="btn-primary">+ 新建任务</button>
+              <div class="header-actions">
+                <button @click="showEditTopic = true" class="btn-manage">管理专题</button>
+                <button @click="showCreateTask = true" class="btn-primary">+ 新建任务</button>
+              </div>
+            </div>
+
+            <!-- 专题描述 -->
+            <div v-if="selectedTopic.description" class="topic-description">
+              <h4>专题描述</h4>
+              <p>{{ selectedTopic.description }}</p>
             </div>
 
             <!-- 任务列表 -->
@@ -632,92 +777,108 @@ const clearUserData = () => {
               <div 
                 v-for="task in selectedTopic.tasks" 
                 :key="task.id"
-                :class="['task-item', { active: selectedTask?.id === task.id }]"
+                class="task-container"
               >
-                <div class="task-content" @click="selectTask(task)">
-                  <div class="task-info">
-                    <h4>{{ task.name }}</h4>
-                                      <div class="task-progress">
-                    <div class="progress-bar">
-                      <div 
-                        class="progress-fill" 
-                        :style="{ 
-                          width: getTaskProgress(task) + '%',
-                          background: getProgressColor(getTaskProgress(task))
-                        }"
-                      ></div>
-                    </div>
-                    <span class="progress-text">{{ getTaskProgress(task) }}%</span>
-                  </div>
-                  </div>
-                </div>
-                <button 
-                  @click.stop="deleteTask(task.id)" 
-                  class="btn-delete"
-                  title="删除任务"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-
-            <!-- 任务详情 -->
-            <div v-if="selectedTask" class="task-detail">
-              <div class="task-header">
-                <button @click="selectedTask = null" class="btn-back">← 返回任务列表</button>
-                <h3>{{ selectedTask.name }}</h3>
-                <button @click="showCreateTodo = true" class="btn-primary">+ 新建待办</button>
-              </div>
-
-              <!-- 待办清单 -->
-              <div class="todo-list">
+                <!-- 任务项 -->
                 <div 
-                  v-for="todo in selectedTask.todos" 
-                  :key="todo.id"
-                  class="todo-item"
+                  :class="['task-item', { active: selectedTask?.id === task.id }]"
                 >
-                  <div class="todo-content">
-                    <input 
-                      type="checkbox" 
-                      :checked="todo.completed"
-                      @change="toggleTodo(todo)"
-                    />
-                    <span :class="{ completed: todo.completed }">{{ todo.title }}</span>
-                  </div>
-                  <div class="todo-actions">
-                    <input 
-                      v-model="todo.progress" 
-                      type="range" 
-                      min="0" 
-                      max="100" 
-                      class="progress-slider"
-                      @input="updateTodoProgress(todo)"
-                    />
-                    <span class="progress-value">{{ todo.progress }}%</span>
-                    <button @click="editTodo(todo)" class="btn-edit">编辑</button>
-                    <button @click="deleteTodo(todo.id)" class="btn-delete-small">删除</button>
-                  </div>
-                  <div v-if="todo.note" class="todo-note">
-                    备注: {{ todo.note }}
+                  <div class="task-content" @click="toggleTaskDetail(task)">
+                    <div class="task-info">
+                      <h4>{{ task.name }}</h4>
+                      <!-- 任务描述预览 -->
+                      <div v-if="task.description" class="task-description-preview">
+                        {{ task.description.length > 50 ? task.description.substring(0, 50) + '...' : task.description }}
+                      </div>
+                    </div>
+                    <div class="task-progress-section">
+                      <div class="task-progress">
+                        <div class="progress-bar">
+                          <div 
+                            class="progress-fill" 
+                            :style="{ 
+                              width: getTaskProgress(task) + '%',
+                              background: getProgressColor(getTaskProgress(task))
+                            }"
+                          ></div>
+                        </div>
+                        <span class="progress-text">{{ getTaskProgress(task) }}%</span>
+                      </div>
+                      <button 
+                        @click.stop="showEditTask = true; selectedTaskForEdit = task" 
+                        class="btn-manage-task"
+                        title="管理任务"
+                      >
+                        管理
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- 任务进度统计 -->
-              <div class="task-stats">
-                <h4>任务进度统计</h4>
-                <div class="stats-row">
-                  <div class="stat-item">
-                    <span>总待办数:</span>
-                    <span>{{ selectedTask.todos.length }}</span>
+                <!-- 任务详情（展开在任务下方） -->
+                <div v-if="selectedTask && selectedTask.id === task.id" class="task-detail-expanded">
+                  <div class="task-detail-header">
+                    <h3>{{ selectedTask.name }}</h3>
+                    <button @click="showCreateTodo = true" class="btn-primary">+ 新建待办</button>
                   </div>
-                  <div class="stat-item">
-                    <span>已完成:</span>
-                    <span>{{ getCompletedTodos() }}</span>
+
+                  <!-- 任务描述 -->
+                  <div v-if="selectedTask.description" class="task-description">
+                    <h4>任务描述</h4>
+                    <p>{{ selectedTask.description }}</p>
                   </div>
-                  <div class="stat-item">
-                    <span>完成率:</span>
-                    <span>{{ getTaskProgress(selectedTask) }}%</span>
+
+                  <!-- 待办清单 -->
+                  <div class="todo-list">
+                    <div 
+                      v-for="todo in selectedTask.todos" 
+                      :key="todo.id"
+                      class="todo-item"
+                    >
+                      <div class="todo-content">
+                        <input 
+                          type="checkbox" 
+                          :checked="todo.completed"
+                          @change="toggleTodo(todo)"
+                        />
+                        <span :class="{ completed: todo.completed }">{{ todo.title }}</span>
+                      </div>
+                      <div class="todo-actions">
+                        <input 
+                          v-model="todo.progress" 
+                          type="range" 
+                          min="0" 
+                          max="100" 
+                          class="progress-slider"
+                          @input="updateTodoProgress(todo)"
+                        />
+                        <span class="progress-value">{{ todo.progress }}%</span>
+                        <button @click="editTodo(todo)" class="btn-edit">编辑</button>
+                        <button @click="deleteTodo(todo.id)" class="btn-delete-small">删除</button>
+                      </div>
+                      <div v-if="todo.note" class="todo-note">
+                        备注: {{ todo.note }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 任务进度统计 -->
+                  <div class="task-stats">
+                    <h4>任务进度统计</h4>
+                    <div class="stats-row">
+                      <div class="stat-item">
+                        <span>总待办数:</span>
+                        <span>{{ selectedTask.todos.length }}</span>
+                      </div>
+                      <div class="stat-item">
+                        <span>已完成:</span>
+                        <span>{{ getCompletedTodos() }}</span>
+                      </div>
+                      <div class="stat-item">
+                        <span>完成率:</span>
+                        <span>{{ getTaskProgress(selectedTask) }}%</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -725,13 +886,21 @@ const clearUserData = () => {
           </div>
         </div>
       </div>
-    </main>
+  </main>
 
     <!-- 模态框 -->
     <CreateTopicModal 
       v-if="showCreateTopic" 
       @close="showCreateTopic = false"
       @create="createTopic"
+    />
+    
+    <EditTopicModal 
+      v-if="showEditTopic && selectedTopic" 
+      :topic="selectedTopic"
+      @close="showEditTopic = false"
+      @update="updateTopic"
+      @delete="deleteTopicFromEdit"
     />
     
     <CreateTaskModal 
@@ -751,6 +920,14 @@ const clearUserData = () => {
       :todo="editingTodo"
       @close="editingTodo = null"
       @update="updateTodo"
+    />
+
+    <EditTaskModal 
+      v-if="showEditTask && selectedTaskForEdit" 
+      :task="selectedTaskForEdit"
+      @close="showEditTask = false; selectedTaskForEdit = null"
+      @update="updateTask"
+      @delete="deleteTaskFromEdit"
     />
   </div>
 </template>
@@ -786,6 +963,26 @@ const clearUserData = () => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.btn-nav {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.875rem;
+}
+
+.btn-nav:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.btn-nav.active {
+  background: rgba(255,255,255,0.4);
+  border-color: rgba(255,255,255,0.6);
 }
 
 .btn-import {
@@ -888,27 +1085,25 @@ const clearUserData = () => {
   transition: all 0.3s ease;
   margin-bottom: 0.5rem;
   border: 1px solid #e2e8f0;
+  position: relative;
+  display: block;
 }
 
 .topic-item:hover {
   background: #f7fafc;
   border-color: #cbd5e0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .topic-item.active {
   background: #ebf8ff;
   border-color: #63b3ed;
-}
-
-.topic-item {
-  position: relative;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  box-shadow: 0 2px 8px rgba(99, 179, 237, 0.2);
 }
 
 .topic-content {
-  flex: 1;
+  width: 100%;
   cursor: pointer;
 }
 
@@ -1242,7 +1437,7 @@ const clearUserData = () => {
 }
 
 .stat-item {
-  display: flex;
+    display: flex;
   justify-content: space-between;
   padding: 0.5rem;
   background: white;
@@ -1259,21 +1454,408 @@ const clearUserData = () => {
   color: #2d3748;
 }
 
+/* 概览页面样式 */
+.overview-container {
+  width: 100%;
+  min-height: 100vh;
+  padding: 20px;
+  background: #f8f9fa;
+}
+
+/* 主界面右侧概览样式 */
+.main-overview {
+  height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 0;
+  margin: -2rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+}
+
+/* 导航按钮样式 */
+.btn-nav {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.875rem;
+}
+
+.btn-nav:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.btn-nav.active {
+  background: rgba(255,255,255,0.4);
+  border-color: rgba(255,255,255,0.6);
+}
+
+/* 专题描述样式 */
+.topic-description {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-left: 4px solid #007bff;
+}
+
+.topic-description h4 {
+  margin: 0 0 10px 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.topic-description p {
+  margin: 0;
+  color: #666;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+/* 任务描述预览样式 */
+.task-description-preview {
+  color: #666;
+  font-size: 12px;
+  margin: 5px 0;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+/* 任务描述样式 */
+.task-description {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-left: 4px solid #28a745;
+}
+
+.task-description h4 {
+  margin: 0 0 10px 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.task-description p {
+  margin: 0;
+  color: #666;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+/* 待办备注样式优化 */
+.todo-note {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #856404;
+  line-height: 1.4;
+}
+
+/* 响应式设计 */
 @media (max-width: 768px) {
-  .app-container {
-    flex-direction: column;
+  .topic-description,
+  .task-description {
+    padding: 12px;
+    margin-bottom: 15px;
   }
   
-  .sidebar {
-    width: 100%;
+  .topic-description h4,
+  .task-description h4 {
+    font-size: 14px;
   }
   
-  .stats-grid {
-    grid-template-columns: 1fr;
+  .topic-description p,
+  .task-description p {
+    font-size: 13px;
   }
   
-  .stats-row {
-    grid-template-columns: 1fr;
+  .task-description-preview {
+    font-size: 11px;
   }
 }
+
+/* 专题头部样式优化 */
+.topic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.btn-manage {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-manage:hover {
+  background: #545b62;
+  transform: translateY(-1px);
+}
+
+.btn-back {
+  background: #f8f9fa;
+  color: #6c757d;
+  border: 1px solid #dee2e6;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.btn-back:hover {
+  background: #e9ecef;
+  color: #495057;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .topic-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 15px;
+  }
+  
+  .header-actions {
+    justify-content: space-between;
+  }
+  
+  .btn-manage,
+  .btn-back {
+    flex: 1;
+  }
+}
+
+/* 任务容器样式 */
+.task-container {
+  margin-bottom: 20px;
+}
+
+/* 任务详情展开区域 */
+.task-detail-expanded {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 20px;
+  margin-top: -1px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.task-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.task-detail-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* 任务项激活状态优化 */
+.task-item.active {
+  background: #ebf8ff;
+  border-color: #63b3ed;
+  border-radius: 8px 8px 0 0;
+  border-bottom: none;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .task-detail-expanded {
+    padding: 15px;
+  }
+  
+  .task-detail-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  
+  .task-detail-header h3 {
+    font-size: 18px;
+  }
+}
+
+/* 任务项布局优化 */
+.task-item {
+  padding: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-bottom: 0.5rem;
+  border: 1px solid #e2e8f0;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.task-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  cursor: pointer;
+}
+
+.task-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-info h4 {
+  margin: 0 0 5px 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.task-progress-section {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-shrink: 0;
+}
+
+.task-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 120px;
+}
+
+.progress-bar {
+  width: 80px;
+  height: 6px;
+  background: #e9ecef;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6c757d;
+  min-width: 35px;
+  text-align: right;
+}
+
+.btn-manage-task {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-manage-task:hover {
+  background: #545b62;
+  transform: translateY(-1px);
+}
+
+.task-description-preview {
+  color: #666;
+  font-size: 12px;
+  margin: 5px 0 0 0;
+  line-height: 1.4;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 任务项悬停和激活状态 */
+.task-item:hover {
+  background: #f7fafc;
+  border-color: #cbd5e0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.task-item.active {
+  background: #ebf8ff;
+  border-color: #63b3ed;
+  border-radius: 8px 8px 0 0;
+  border-bottom: none;
+  box-shadow: 0 2px 8px rgba(99, 179, 237, 0.2);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .task-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  
+  .task-progress-section {
+    justify-content: space-between;
+  }
+  
+  .task-progress {
+    min-width: auto;
+  }
+  
+  .progress-bar {
+    width: 60px;
+  }
+  
+  .btn-manage-task {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+}
+
 </style>

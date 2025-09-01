@@ -20,17 +20,6 @@
         </div>
         
         <div class="form-group">
-          <label for="edit-todo-description">待办描述</label>
-          <textarea 
-            id="edit-todo-description"
-            v-model="form.description" 
-            placeholder="请输入待办描述（可选）"
-            rows="3"
-            maxlength="300"
-          ></textarea>
-        </div>
-        
-        <div class="form-group">
           <label for="edit-todo-progress">进度</label>
           <div class="progress-input">
             <input 
@@ -85,7 +74,6 @@ const emit = defineEmits(['close', 'update'])
 const form = reactive({
   id: '',
   title: '',
-  description: '',
   progress: 0,
   note: '',
   completed: false
@@ -94,7 +82,13 @@ const form = reactive({
 // 监听todo变化，更新表单
 watch(() => props.todo, (newTodo) => {
   if (newTodo) {
-    Object.assign(form, newTodo)
+    Object.assign(form, {
+      id: newTodo.id,
+      title: newTodo.title,
+      progress: newTodo.progress,
+      note: newTodo.note,
+      completed: newTodo.completed
+    })
   }
 }, { immediate: true })
 
@@ -106,7 +100,6 @@ const handleSubmit = () => {
   emit('update', {
     id: form.id,
     title: form.title.trim(),
-    description: form.description.trim(),
     progress: form.progress,
     note: form.note.trim(),
     completed: form.completed

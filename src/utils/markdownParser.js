@@ -19,6 +19,11 @@ export function parseMarkdownToJson(markdownText) {
     
     // 解析专题（一级标题）
     if (trimmedLine.startsWith('# ') && !trimmedLine.startsWith('##')) {
+      // 保存当前任务到当前专题
+      if (currentTask && currentTopic) {
+        currentTopic.tasks.push(currentTask)
+      }
+      
       if (currentTopic) {
         result.push(currentTopic)
       }

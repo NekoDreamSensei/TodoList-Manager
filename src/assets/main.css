@@ -54,7 +54,7 @@ a {
   text-decoration: none;
 }
 
-a:hover {
+  a:hover {
   text-decoration: underline;
 }
 
@@ -144,7 +144,7 @@ a:hover {
 
 .slide-leave-to {
   transform: translateX(100%);
-}
+  }
 
 /* 加载动画 */
 .loading {
@@ -218,7 +218,7 @@ a:hover {
 .badge-primary {
   background: #ebf8ff;
   color: #2b6cb0;
-}
+  }
 
 .badge-success {
   background: #f0fff4;
