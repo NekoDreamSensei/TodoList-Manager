@@ -9,6 +9,7 @@ import EditTopicModal from './components/EditTopicModal.vue'
 import ProgressOverview from './components/ProgressOverview.vue'
 import EditTaskModal from './components/EditTaskModal.vue'
 import { parseMarkdownToJson, convertJsonToMarkdown, validateMarkdownFormat } from './utils/markdownParser.js'
+import ExportViewModal from './components/ExportViewModal.vue'
 
 // 响应式数据
 const currentUser = ref(null)
@@ -22,6 +23,7 @@ const editingTodo = ref(null)
 const showEditTopic = ref(false)
 const showEditTask = ref(false)
 const selectedTaskForEdit = ref(null)
+const showExportView = ref(false)
 
 // 重名检测和自动重命名工具函数
 const generateUniqueName = (baseName, existingNames, type = '') => {
@@ -700,6 +702,7 @@ const deleteTaskFromEdit = (taskId) => {
           <button @click="exportUserData" class="btn-export">导出JSON</button>
           <button @click="exportUserDataAsMarkdown" class="btn-export-md">导出MD</button>
           <button @click="clearUserData" class="btn-clear">清除数据</button>
+          <button @click="showExportView = true" class="btn-export-view">导出视图</button>
           <button @click="logout" class="btn-logout">退出登录</button>
         </div>
       </div>
@@ -929,6 +932,13 @@ const deleteTaskFromEdit = (taskId) => {
       @update="updateTask"
       @delete="deleteTaskFromEdit"
     />
+
+    <ExportViewModal
+      v-if="showExportView"
+      :topics="topics"
+      :username="currentUser.username"
+      @close="showExportView = false"
+    />
   </div>
 </template>
 
@@ -1027,6 +1037,21 @@ const deleteTaskFromEdit = (taskId) => {
 }
 
 .btn-export-md:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.btn-export-view {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.875rem;
+}
+
+.btn-export-view:hover {
   background: rgba(255,255,255,0.3);
 }
 
