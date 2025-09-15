@@ -1,6 +1,6 @@
 package com.todolist.controller;
 
-import com.todolist.dto.ApiResponse;
+import com.todolist.exception.ApiResponse;
 import com.todolist.dto.AuthResponse;
 import com.todolist.dto.LoginRequest;
 import com.todolist.dto.RegisterRequest;
@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -51,13 +52,13 @@ public class UserController {
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "用户注销", description = "用户注销登录")
+    @Operation(summary = "用户退出登录", description = "用户退出登录，清除服务端会话信息")
     @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "注销成功"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "退出登录成功"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未登录")
     })
-    public ResponseEntity<ApiResponse<Object>> logout() {
-        ApiResponse<Object> response = ApiResponse.success(null, "注销成功");
+    public ResponseEntity<ApiResponse<Object>> logout(HttpServletRequest request) {
+        ApiResponse<Object> response = userService.logout(request);
         return ResponseEntity.ok(response);
     }
 
@@ -123,5 +124,28 @@ public class UserController {
     public ResponseEntity<Void> deleteUser(@Parameter(description = "用户ID", required = true) @PathVariable Long id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
+    }
+
+
+    @GetMapping("/me")
+    @Operation(summary = "获取当前用户信息", description = "获取当前登录用户的详细信息")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "获取成功"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未登录")
+    })
+    public ResponseEntity<User> getCurrentUser(HttpServletRequest request) {
+        User user = userService.getCurrentUser(request);
+        return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/check-auth")
+    @Operation(summary = "检查登录状态", description = "检查当前用户是否已登录")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "已登录"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未登录")
+    })
+    public ResponseEntity<ApiResponse<Object>> checkAuthStatus(HttpServletRequest request) {
+        ApiResponse<Object> response = userService.checkAuthStatus(request);
+        return ResponseEntity.ok(response);
     }
 }

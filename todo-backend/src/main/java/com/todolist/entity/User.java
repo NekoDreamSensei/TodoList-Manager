@@ -1,5 +1,5 @@
 package com.todolist.entity;
-
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -62,6 +62,7 @@ public class User {
      * 级联操作，懒加载，提高性能
      */
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
     private List<Topic> topics = new ArrayList<>();
     
     /**

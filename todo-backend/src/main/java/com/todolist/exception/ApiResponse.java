@@ -1,4 +1,4 @@
-package com.todolist.dto;
+package com.todolist.exception;
 
 /**
  * 统一API响应类
@@ -27,6 +27,15 @@ public class ApiResponse<T> {
     
     public static <T> ApiResponse<T> success(T data) {
         return success(data, "操作成功");
+    }
+    
+    // 新增：支持success字段的构造函数
+    public static <T> ApiResponse<T> success(boolean success, String message, T data) {
+        ApiResponse<T> response = new ApiResponse<>();
+        response.success = success;
+        response.message = message;
+        response.data = data;
+        return response;
     }
     
     // 错误响应构造函数

@@ -39,7 +39,9 @@
         />
       </div>
       
-      <button type="submit" class="btn-submit">登录</button>
+      <button type="submit" class="btn-submit" :disabled="isLoading">
+        {{ isLoading ? '登录中...' : '登录' }}
+      </button>
     </form>
 
     <!-- 注册表单 -->
@@ -77,7 +79,9 @@
         />
       </div>
       
-      <button type="submit" class="btn-submit">注册</button>
+      <button type="submit" class="btn-submit" :disabled="isLoading">
+        {{ isLoading ? '注册中...' : '注册' }}
+      </button>
     </form>
 
     <!-- 错误提示 -->
@@ -89,11 +93,14 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
+import { userService } from '../services/userService.js'
+import { authService } from '../services/authService.js'
 
 const emit = defineEmits(['login', 'register'])
 
 const activeTab = ref('login')
 const errorMessage = ref('')
+const isLoading = ref(false)
 
 const loginForm = reactive({
   username: '',
@@ -106,27 +113,39 @@ const registerForm = reactive({
   confirmPassword: ''
 })
 
-const handleLogin = () => {
+const handleLogin = async () => {
   if (!loginForm.username || !loginForm.password) {
     errorMessage.value = '请填写完整的登录信息'
     return
   }
   
-  // 从localStorage获取用户数据
-  const users = JSON.parse(localStorage.getItem('users') || '[]')
-  const user = users.find(u => 
-    u.username === loginForm.username && u.password === loginForm.password
-  )
+  isLoading.value = true
+  errorMessage.value = ''
   
-  if (user) {
-    errorMessage.value = ''
-    emit('login', { username: user.username })
-  } else {
-    errorMessage.value = '用户名或密码错误'
+  try {
+    console.log('开始登录...')
+    const response = await userService.login({
+      username: loginForm.username,
+      password: loginForm.password
+    })
+    
+    console.log('登录成功:', response)
+    
+    // 使用authService设置认证状态
+    authService.setAuth(response.user, response.token)
+    
+    // 触发login事件
+    emit('login', response.user)
+    
+  } catch (error) {
+    console.error('登录失败:', error)
+    errorMessage.value = error.message || '登录失败，请检查用户名和密码'
+  } finally {
+    isLoading.value = false
   }
 }
 
-const handleRegister = () => {
+const handleRegister = async () => {
   if (!registerForm.username || !registerForm.password || !registerForm.confirmPassword) {
     errorMessage.value = '请填写完整的注册信息'
     return
@@ -137,131 +156,130 @@ const handleRegister = () => {
     return
   }
   
-  if (registerForm.password.length < 6) {
-    errorMessage.value = '密码长度至少6位'
-    return
-  }
-  
-  // 检查用户名是否已存在
-  const users = JSON.parse(localStorage.getItem('users') || '[]')
-  if (users.find(u => u.username === registerForm.username)) {
-    errorMessage.value = '用户名已存在'
-    return
-  }
-  
-  // 创建新用户
-  const newUser = {
-    username: registerForm.username,
-    password: registerForm.password,
-    createdAt: new Date().toISOString()
-  }
-  
-  users.push(newUser)
-  localStorage.setItem('users', JSON.stringify(users))
-  
-  // 初始化新用户的专题数据
-  const allTopics = JSON.parse(localStorage.getItem('topics') || '{}')
-  allTopics[newUser.username] = []
-  localStorage.setItem('topics', JSON.stringify(allTopics))
-  
+  isLoading.value = true
   errorMessage.value = ''
-  emit('register', { username: newUser.username })
+  
+  try {
+    console.log('开始注册...')
+    const response = await userService.register({
+      username: registerForm.username,
+      password: registerForm.password
+    })
+    
+    console.log('注册成功:', response)
+    
+    // 使用authService设置认证状态
+    authService.setAuth(response.user, response.token)
+    
+    // 显示成功消息
+    errorMessage.value = '注册成功！正在跳转...'
+    
+    // 延迟触发register事件
+    setTimeout(() => {
+      emit('register', response.user)
+    }, 1500)
+    
+  } catch (error) {
+    console.error('注册失败:', error)
+    errorMessage.value = error.message || '注册失败，请检查用户名是否已存在'
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 
 <style scoped>
 .auth-form {
-  background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-  max-width: 400px;
   width: 100%;
 }
 
 .auth-tabs {
   display: flex;
-  margin-bottom: 2rem;
-  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #e9ecef;
 }
 
 .tab-btn {
   flex: 1;
-  padding: 1rem;
+  padding: 0.75rem;
   background: none;
   border: none;
+  border-bottom: 2px solid transparent;
   cursor: pointer;
   font-size: 1rem;
-  color: #718096;
-  transition: all 0.3s ease;
-  border-bottom: 2px solid transparent;
+  color: #666;
+  transition: all 0.2s;
 }
 
 .tab-btn.active {
-  color: #667eea;
-  border-bottom-color: #667eea;
+  color: #007bff;
+  border-bottom-color: #007bff;
 }
 
 .tab-btn:hover {
-  color: #4a5568;
+  color: #007bff;
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
 .form-group label {
+  margin-bottom: 0.5rem;
   font-weight: 500;
-  color: #2d3748;
+  color: #333;
 }
 
 .form-group input {
   padding: 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 1rem;
-  transition: border-color 0.3s ease;
+  transition: border-color 0.2s;
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
 .btn-submit {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 0.75rem;
+  background: #007bff;
   color: white;
   border: none;
-  padding: 1rem;
-  border-radius: 8px;
+  border-radius: 6px;
+  cursor: pointer;
   font-size: 1rem;
   font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color 0.2s;
   margin-top: 1rem;
 }
 
-.btn-submit:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+.btn-submit:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.btn-submit:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
 }
 
 .error-message {
-  background: #fed7d7;
-  color: #c53030;
-  padding: 1rem;
-  border-radius: 6px;
   margin-top: 1rem;
-  text-align: center;
-  border: 1px solid #feb2b2;
+  padding: 0.75rem;
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+  border-radius: 6px;
+  font-size: 0.9rem;
 }
-</style> 
+</style>

@@ -73,6 +73,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private boolean isPublicPath(String requestURI) {
         return requestURI.startsWith("/api/users/login") ||
                requestURI.startsWith("/api/users/register") ||
+               requestURI.startsWith("/api/users/check-auth") || // 添加这一行！
                requestURI.startsWith("/swagger-ui") ||
                requestURI.startsWith("/api-docs") ||
                requestURI.startsWith("/v3/api-docs") ||

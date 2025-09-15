@@ -1,6 +1,6 @@
 package com.todolist.exception;
 
-import com.todolist.dto.ApiResponse;
+import com.todolist.exception.ApiResponse;
 import com.todolist.dto.AuthResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
