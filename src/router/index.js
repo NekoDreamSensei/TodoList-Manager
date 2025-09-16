@@ -4,6 +4,7 @@ import { authService } from "../services/authService.js"
 // 导入页面组件
 import LoginPage from "../views/LoginPage.vue"
 import DashboardPage from "../views/DashboardPage.vue"
+import TestPage from "../views/TestPage.vue"
 
 const routes = [
   {
@@ -26,6 +27,15 @@ const routes = [
     meta: { 
       requiresAuth: true,
       title: "仪表板"
+    }
+  },
+  {
+    path: "/test",
+    name: "Test", 
+    component: TestPage,
+    meta: { 
+      requiresAuth: true,
+      title: "测试页面"
     }
   },
   {

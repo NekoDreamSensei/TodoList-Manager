@@ -23,6 +23,15 @@
       <p>欢迎来到仪表板！</p>
       <p>当前用户: {{ currentUser?.username || '未登录' }}</p>
       <p>认证状态: {{ isAuthenticated ? '已认证' : '未认证' }}</p>
+      
+      <!-- 添加测试页面链接 -->
+      <div class="quick-actions">
+        <h3>快速操作</h3>
+        <button @click="goToTestPage" class="btn-test-page">
+          🧪 进入测试页面
+        </button>
+      </div>
+      
       <p>调试信息: {{ JSON.stringify({ hasUser: !!currentUser, hasToken: !!authService.getToken() }, null, 2) }}</p>
     </div>
   </div>
@@ -117,6 +126,10 @@ const logout = async () => {
     router.push('/')
   }
 }
+
+const goToTestPage = () => {
+  router.push('/test')
+}
 </script>
 
 <style scoped>
@@ -209,5 +222,32 @@ h1 {
   margin: 1rem 0;
   color: #666;
   font-size: 1.1rem;
+}
+
+.quick-actions {
+  margin: 2rem 0;
+  padding: 1rem;
+  background: #e9ecef;
+  border-radius: 8px;
+}
+
+.quick-actions h3 {
+  margin: 0 0 1rem 0;
+  color: #333;
+}
+
+.btn-test-page {
+  padding: 0.75rem 1.5rem;
+  background: #17a2b8;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+}
+
+.btn-test-page:hover {
+  background: #138496;
 }
 </style>

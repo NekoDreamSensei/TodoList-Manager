@@ -5,10 +5,9 @@ class AuthService {
   constructor() {
     this.currentUser = null
     this.token = null
-    // 延迟初始化，确保在页面完全加载后执行
-    setTimeout(() => {
-      this.init()
-    }, 0)
+    this.initialized = false
+    // 立即初始化，不使用setTimeout
+    this.init()
   }
 
   init() {
@@ -42,10 +41,20 @@ class AuthService {
       console.log('userStr:', userStr)
       console.log('token:', token)
     }
+    
+    this.initialized = true
     console.log('=== AuthService 初始化完成 ===')
   }
 
+  // 确保初始化完成
+  ensureInitialized() {
+    if (!this.initialized) {
+      this.init()
+    }
+  }
+
   isAuthenticated() {
+    this.ensureInitialized()
     const authenticated = !!(this.currentUser && this.token)
     console.log('检查认证状态:', { 
       authenticated, 
@@ -58,11 +67,13 @@ class AuthService {
   }
 
   getCurrentUser() {
+    this.ensureInitialized()
     console.log('获取当前用户:', this.currentUser)
     return this.currentUser
   }
 
   getToken() {
+    this.ensureInitialized()
     return this.token
   }
 
