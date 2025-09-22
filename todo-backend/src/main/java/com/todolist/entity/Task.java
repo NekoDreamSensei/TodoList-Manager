@@ -1,5 +1,8 @@
 package com.todolist.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -17,6 +20,7 @@ import java.util.List;
  */
 @Entity
 @Table(name = "tasks")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Task {
     
     /**
@@ -31,8 +35,15 @@ public class Task {
      * 任务标题
      * 不能为空，用于显示和识别任务
      */
-    @Column(nullable = false)
+    @Column(name = "title", nullable = false)
     private String title;
+    
+    /**
+     * 任务名称（兼容旧字段）
+     * 与 title 字段相同，用于向后兼容
+     */
+    @Column(name = "name", nullable = false)
+    private String name;
     
     /**
      * 任务描述
@@ -83,6 +94,7 @@ public class Task {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "topic_id", nullable = false)
+    @JsonBackReference
     private Topic topic;
     
     /**
@@ -91,6 +103,7 @@ public class Task {
      * 级联操作，懒加载
      */
     @OneToMany(mappedBy = "task", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonManagedReference
     private List<Todo> todos = new ArrayList<>();
     
     /**
@@ -109,10 +122,11 @@ public class Task {
      */
     public Task(String title, String description, Topic topic) {
         this.title = title;
+        this.name = title; // 设置 name 字段与 title 相同
         this.description = description;
         this.topic = topic;
         this.status = "待开始";
-        this.priority = "中";
+        this.priority = "普通";
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -145,7 +159,27 @@ public class Task {
      * 
      * @param title 任务标题
      */
-    public void setTitle(String title) { this.title = title; }
+    public void setTitle(String title) { 
+        this.title = title;
+        this.name = title; // 同时设置 name 字段
+    }
+    
+    /**
+     * 获取任务名称（兼容性方法）
+     * 
+     * @return 任务名称
+     */
+    public String getName() { return name; }
+    
+    /**
+     * 设置任务名称（兼容性方法）
+     * 
+     * @param name 任务名称
+     */
+    public void setName(String name) { 
+        this.name = name;
+        this.title = name; // 同时设置 title 字段
+    }
     
     /**
      * 获取任务描述
@@ -246,18 +280,36 @@ public class Task {
     public void setTopic(Topic topic) { this.topic = topic; }
     
     /**
-     * 获取任务下的待办事项列表
+     * 获取待办事项列表
      * 
      * @return 待办事项列表
      */
     public List<Todo> getTodos() { return todos; }
     
     /**
-     * 设置任务下的待办事项列表
+     * 设置待办事项列表
      * 
      * @param todos 待办事项列表
      */
     public void setTodos(List<Todo> todos) { this.todos = todos; }
+    
+    /**
+     * 创建前的回调方法
+     * JPA生命周期回调，在实体保存前自动调用
+     * 自动设置创建和更新时间
+     */
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        // 确保 name 和 title 字段同步
+        if (this.name == null && this.title != null) {
+            this.name = this.title;
+        }
+        if (this.title == null && this.name != null) {
+            this.title = this.name;
+        }
+    }
     
     /**
      * 更新前的回调方法
@@ -267,5 +319,12 @@ public class Task {
     @PreUpdate
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
+        // 确保 name 和 title 字段同步
+        if (this.name == null && this.title != null) {
+            this.name = this.title;
+        }
+        if (this.title == null && this.name != null) {
+            this.title = this.name;
+        }
     }
 }

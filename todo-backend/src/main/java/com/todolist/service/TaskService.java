@@ -30,13 +30,12 @@ public class TaskService {
     
     /**
      * 根据主题ID获取该主题下的所有任务
-     * 按创建时间倒序排列
      * 
      * @param topicId 主题ID
      * @return List<Task> 该主题下的任务列表
      */
     public List<Task> getTasksByTopicId(Long topicId) {
-        return taskRepository.findByTopicIdOrderByCreatedAtDesc(topicId);
+        return taskRepository.findByTopicId(topicId);
     }
     
     /**
@@ -58,12 +57,10 @@ public class TaskService {
      * @throws RuntimeException 如果主题不存在则抛出异常
      */
     public Task createTask(Task task, Long topicId) {
-        Optional<Topic> topic = topicRepository.findById(topicId);
-        if (topic.isPresent()) {
-            task.setTopic(topic.get());
-            return taskRepository.save(task);
-        }
-        throw new RuntimeException("专题不存在");
+        Topic topic = topicRepository.findById(topicId)
+            .orElseThrow(() -> new RuntimeException("主题不存在，ID: " + topicId));
+        task.setTopic(topic);
+        return taskRepository.save(task);
     }
     
     /**
@@ -80,8 +77,13 @@ public class TaskService {
      * 删除任务
      * 
      * @param id 要删除的任务ID
+     * @return boolean 删除是否成功
      */
-    public void deleteTask(Long id) {
-        taskRepository.deleteById(id);
+    public boolean deleteTask(Long id) {
+        if (taskRepository.existsById(id)) {
+            taskRepository.deleteById(id);
+            return true;
+        }
+        return false;
     }
 }

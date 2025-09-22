@@ -1,5 +1,7 @@
 package com.todolist.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -17,6 +19,7 @@ import java.util.List;
  */
 @Entity
 @Table(name = "topics")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Topic {
     
     /**
@@ -62,6 +65,7 @@ public class Topic {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnoreProperties({"topics"})
     private User user;
     
     /**
@@ -70,6 +74,7 @@ public class Topic {
      * 级联操作，懒加载
      */
     @OneToMany(mappedBy = "topic", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonManagedReference
     private List<Task> tasks = new ArrayList<>();
     
     /**

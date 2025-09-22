@@ -3,7 +3,9 @@ import { authService } from "../services/authService.js"
 
 // 导入页面组件
 import LoginPage from "../views/LoginPage.vue"
+import MainLayout from "../views/MainLayout.vue"
 import DashboardPage from "../views/DashboardPage.vue"
+import TopicDetailPage from "../views/TopicDetailPage.vue"
 import TestPage from "../views/TestPage.vue"
 
 const routes = [
@@ -23,11 +25,34 @@ const routes = [
   {
     path: "/dashboard",
     name: "Dashboard", 
-    component: DashboardPage,
+    component: MainLayout,
     meta: { 
       requiresAuth: true,
       title: "仪表板"
-    }
+    },
+    children: [
+      {
+        path: "",
+        name: "DashboardHome",
+        component: DashboardPage
+      }
+    ]
+  },
+  {
+    path: "/topic/:id",
+    name: "TopicDetail",
+    component: MainLayout,
+    meta: { 
+      requiresAuth: true,
+      title: "专题详情"
+    },
+    children: [
+      {
+        path: "",
+        name: "TopicDetailHome",
+        component: TopicDetailPage
+      }
+    ]
   },
   {
     path: "/test",

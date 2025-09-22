@@ -30,13 +30,12 @@ public class TodoService {
     
     /**
      * 根据任务ID获取该任务下的所有待办事项
-     * 按创建时间倒序排列
      * 
      * @param taskId 任务ID
      * @return List<Todo> 该任务下的待办事项列表
      */
     public List<Todo> getTodosByTaskId(Long taskId) {
-        return todoRepository.findByTaskIdOrderByCreatedAtDesc(taskId);
+        return todoRepository.findByTaskId(taskId);
     }
     
     /**
@@ -58,12 +57,34 @@ public class TodoService {
      * @throws RuntimeException 如果任务不存在则抛出异常
      */
     public Todo createTodo(Todo todo, Long taskId) {
-        Optional<Task> task = taskRepository.findById(taskId);
-        if (task.isPresent()) {
-            todo.setTask(task.get());
-            return todoRepository.save(todo);
+        Task task = taskRepository.findById(taskId)
+            .orElseThrow(() -> new RuntimeException("任务不存在，ID: " + taskId));
+        
+        // 确保 completed 和 isCompleted 字段同步
+        if (todo.getIsCompleted() == null) {
+            todo.setIsCompleted(false);
         }
-        throw new RuntimeException("任务不存在");
+        if (todo.getCompleted() == null) {
+            todo.setCompleted(todo.getIsCompleted());
+        }
+        
+        // 确保 title 字段不为空
+        if (todo.getTitle() == null || todo.getTitle().trim().isEmpty()) {
+            todo.setTitle(todo.getContent()); // 如果 title 为空，使用 content 作为 title
+        }
+        
+        // 确保 content 字段不为空
+        if (todo.getContent() == null || todo.getContent().trim().isEmpty()) {
+            todo.setContent(todo.getTitle()); // 如果 content 为空，使用 title 作为 content
+        }
+        
+        // 确保进度字段不为空
+        if (todo.getProgress() == null) {
+            todo.setProgress(0);
+        }
+        
+        todo.setTask(task);
+        return todoRepository.save(todo);
     }
     
     /**
@@ -80,8 +101,13 @@ public class TodoService {
      * 删除待办事项
      * 
      * @param id 要删除的待办事项ID
+     * @return boolean 删除是否成功
      */
-    public void deleteTodo(Long id) {
-        todoRepository.deleteById(id);
+    public boolean deleteTodo(Long id) {
+        if (todoRepository.existsById(id)) {
+            todoRepository.deleteById(id);
+            return true;
+        }
+        return false;
     }
 }

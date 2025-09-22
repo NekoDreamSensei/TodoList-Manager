@@ -58,12 +58,10 @@ public class TopicService {
      * @throws RuntimeException 如果用户不存在则抛出异常
      */
     public Topic createTopic(Topic topic, Long userId) {
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isPresent()) {
-            topic.setUser(user.get());
-            return topicRepository.save(topic);
-        }
-        throw new RuntimeException("用户不存在");
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("用户不存在，ID: " + userId));
+        topic.setUser(user);
+        return topicRepository.save(topic);
     }
     
     /**
@@ -80,8 +78,13 @@ public class TopicService {
      * 删除主题
      * 
      * @param id 要删除的主题ID
+     * @return boolean 删除是否成功
      */
-    public void deleteTopic(Long id) {
-        topicRepository.deleteById(id);
+    public boolean deleteTopic(Long id) {
+        if (topicRepository.existsById(id)) {
+            topicRepository.deleteById(id);
+            return true;
+        }
+        return false;
     }
 }

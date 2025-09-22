@@ -1,5 +1,7 @@
 package com.todolist.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -15,6 +17,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "todos")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Todo {
     
     /**
@@ -24,6 +27,13 @@ public class Todo {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    
+    /**
+     * 待办事项标题
+     * 不能为空，用于显示和识别待办事项
+     */
+    @Column(name = "title", nullable = false)
+    private String title;
     
     /**
      * 待办事项内容
@@ -38,6 +48,27 @@ public class Todo {
      */
     @Column(name = "is_completed")
     private Boolean isCompleted = false;
+    
+    /**
+     * 完成状态（兼容旧字段）
+     * 与 isCompleted 字段相同，用于向后兼容
+     */
+    @Column(name = "completed")
+    private Boolean completed = false;
+    
+    /**
+     * 进度百分比
+     * 表示待办事项的完成进度，0-100
+     */
+    @Column(name = "progress")
+    private Integer progress = 0;
+    
+    /**
+     * 备注
+     * 待办事项的额外说明
+     */
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note;
     
     /**
      * 完成时间
@@ -67,6 +98,7 @@ public class Todo {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "task_id", nullable = false)
+    @JsonBackReference
     private Task task;
     
     /**
@@ -79,13 +111,17 @@ public class Todo {
      * 带参数的构造函数
      * 创建新待办事项时使用，自动设置创建和更新时间
      * 
+     * @param title 待办事项标题
      * @param content 待办事项内容
      * @param task 所属任务
      */
-    public Todo(String content, Task task) {
+    public Todo(String title, String content, Task task) {
+        this.title = title;
         this.content = content;
         this.task = task;
         this.isCompleted = false;
+        this.completed = false;
+        this.progress = 0;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -105,6 +141,20 @@ public class Todo {
      * @param id 待办事项ID
      */
     public void setId(Long id) { this.id = id; }
+    
+    /**
+     * 获取待办事项标题
+     * 
+     * @return 待办事项标题
+     */
+    public String getTitle() { return title; }
+    
+    /**
+     * 设置待办事项标题
+     * 
+     * @param title 待办事项标题
+     */
+    public void setTitle(String title) { this.title = title; }
     
     /**
      * 获取待办事项内容
@@ -134,12 +184,60 @@ public class Todo {
      */
     public void setIsCompleted(Boolean isCompleted) { 
         this.isCompleted = isCompleted;
-        if (isCompleted && this.completedAt == null) {
-            this.completedAt = LocalDateTime.now();
-        } else if (!isCompleted) {
-            this.completedAt = null;
+        this.completed = isCompleted; // 同步设置 completed 字段
+    }
+    
+    /**
+     * 获取完成状态（兼容性方法）
+     * 
+     * @return 完成状态
+     */
+    public Boolean getCompleted() { return completed; }
+    
+    /**
+     * 设置完成状态（兼容性方法）
+     * 
+     * @param completed 完成状态
+     */
+    public void setCompleted(Boolean completed) { 
+        this.completed = completed;
+        this.isCompleted = completed; // 同步设置 isCompleted 字段
+    }
+    
+    /**
+     * 获取进度百分比
+     * 
+     * @return 进度百分比
+     */
+    public Integer getProgress() { return progress; }
+    
+    /**
+     * 设置进度百分比
+     * 
+     * @param progress 进度百分比
+     */
+    public void setProgress(Integer progress) { 
+        this.progress = progress;
+        // 如果进度是100%，自动标记为完成
+        if (progress != null && progress >= 100) {
+            this.isCompleted = true;
+            this.completed = true;
         }
     }
+    
+    /**
+     * 获取备注
+     * 
+     * @return 备注
+     */
+    public String getNote() { return note; }
+    
+    /**
+     * 设置备注
+     * 
+     * @param note 备注
+     */
+    public void setNote(String note) { this.note = note; }
     
     /**
      * 获取完成时间
@@ -198,6 +296,32 @@ public class Todo {
     public void setTask(Task task) { this.task = task; }
     
     /**
+     * 创建前的回调方法
+     * JPA生命周期回调，在实体保存前自动调用
+     * 自动设置创建和更新时间
+     */
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        // 确保 completed 和 isCompleted 字段同步
+        if (this.completed == null && this.isCompleted != null) {
+            this.completed = this.isCompleted;
+        }
+        if (this.isCompleted == null && this.completed != null) {
+            this.isCompleted = this.completed;
+        }
+        if (this.isCompleted == null && this.completed == null) {
+            this.isCompleted = false;
+            this.completed = false;
+        }
+        // 确保进度字段不为空
+        if (this.progress == null) {
+            this.progress = 0;
+        }
+    }
+    
+    /**
      * 更新前的回调方法
      * JPA生命周期回调，在实体更新前自动调用
      * 自动更新updatedAt字段为当前时间
@@ -205,5 +329,12 @@ public class Todo {
     @PreUpdate
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
+        // 确保 completed 和 isCompleted 字段同步
+        if (this.completed == null && this.isCompleted != null) {
+            this.completed = this.isCompleted;
+        }
+        if (this.isCompleted == null && this.completed != null) {
+            this.isCompleted = this.completed;
+        }
     }
 }
